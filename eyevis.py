@@ -15,6 +15,51 @@ import requests, lxml.html
 
 
 
+def getCellXlsx(  row       # номер строки
+                , col       # номер колонки 
+                , isDigit   # Признак, числовое ли значение нужно из этого поля
+                , sheet     #  лист XLSX
+                ):
+    '''
+    Функция возвращает значение xls-ячейки в виде строки.    
+    Для цифровых ячеек делается предварительное преобразование 
+    в число (пустые и нечисловые значения преобразуются в "0")
+    '''
+    ccc = sheet.cell(row=row, column=col)
+    cellType  = ccc.data_type
+    cellValue = ccc.value
+    if (isDigit == 'Y') : 
+        if (cellValue == None) : 
+            ss = '0'
+        elif (cellType in ('n')) :                  # numeric
+            if int(cellValue) == cellValue:
+                ss = str(int(cellValue))
+            else :
+                ss = str(cellValue)
+        else :
+#           ss = '0'
+            try:
+                t = cellValue
+                t = t.replace('.','')
+                t = t.replace(',','.')
+                t = t.replace('$','')
+                ss = str(float(t))
+            except ValueError as e:
+                ss='0.01'
+    else :
+        if (cellValue == None) : 
+            ss = ''
+        elif (cellType in ('n')) :                    # numeric
+            if int(cellValue) == cellValue:
+                ss = str(int(cellValue))
+            else :
+                ss = str(cellValue)
+        else :
+            ss = str(cellValue)
+    return ss
+
+
+
 def nameToId(value) :
     result = ''
     for ch in value:
@@ -57,13 +102,22 @@ def getXlsxString(sh, i, in_columns_j):
     for item in in_columns_j.keys() :
         j = in_columns_j[item]
         if item in ('закупка','продажа','цена','цена1') :
-            if getCellXlsx(row=i, col=j, isDigit='N', sheet=sh).find('Call for Pricing') >=0 :
+            if getCellXlsx(row=i, col=j, isDigit='N', sheet=sh)=='':
+                j = j+1                                 # иногда цена бывает в следующей колонке.
+            if getCellXlsx(row=i, col=j, isDigit='N', sheet=sh).find('request') >=0 :
                 impValues[item] = '0.1'
             else :
                 impValues[item] = getCellXlsx(row=i, col=j, isDigit='Y', sheet=sh)
             #print(sh, i, sh.cell( row=i, column=j).value, sh.cell(row=i, column=j).number_format, currencyType(sh, i, j))
         elif item == 'валюта_по_формату':
             impValues[item] = currencyType(row=i, col=j, sheet=sh)
+        elif item == 'long_descr':
+            long_descr=[]
+            for k in range(7, 45):
+                tempVal = getCellXlsx(row=i, col=k, isDigit='N', sheet=sh)
+                if tempVal != '':
+                    long_descr.append(tempVal)
+            impValues['long_descr'] = '; '.join(long_descr)
         else:
             impValues[item] = getCellXlsx(row=i, col=j, isDigit='N', sheet=sh)
     return impValues
@@ -104,24 +158,26 @@ def convert_excel2csv(cfg):
     csvWriterUSD.writeheader()
 
     recOut  ={}
+    grpName = ''
+    subGrpName = ''
     for i in range(2, sheet.max_row +1) :                                # xlsx
-#   for i in range(2, sheet.nrows) :                                     # xls
         i_last = i
         try:
             impValues = getXlsxString(sheet, i, in_cols_j)               # xlsx
-            #impValues = getXlsString(sheet, i, in_cols_j)               # xls
-            #print( impValues )
-            #if sheet.cell( row=i, column=in_cols_j['код_']).fill.fgColor.type=='indexed':   # подгруппа
-                #print(sheet.cell( row=i, column=in_cols_j['код_']).fill.fgColor.indexed)
-                #col2 = sheet.cell( row=i, column=in_cols_j['код_']).value.strip()
-                #t = col2.rpartition(' ')
-                #brand  = t[2]
-                #subgrp = t[0]
-                #continue
-            if impValues['цена1']=='0': # (ccc.value == None) or (ccc2.value == None) :   # Пустая строка
+            if sheet.cell( row=i, column=in_cols_j['группа_']).font.sz==16:     # группа
+                grpName =  impValues['группа_']
+                subGrpName = ''
+                print(grpName)
+                continue
+            if sheet.cell( row=i, column=in_cols_j['подгруппа']).font.sz==12:   # подгруппа
+                subGrpName = impValues['подгруппа']
+                continue
+            if impValues['код_']=='' or sheet.cell( row=i, column=in_cols_j['код_']).font.bold==True :   # Пустая строка
                 #print( 'Пустая строка. i=',i, impValues )
                 continue
-            else :                                                         # Обычная строка
+            else :                                                              # Обычная строка
+                impValues['группа_'] = grpName
+                impValues['подгруппа'] = subGrpName
                 for outColName in out_template.keys() :
                     shablon = out_template[outColName]
                     for key in impValues.keys():
@@ -133,15 +189,15 @@ def convert_excel2csv(cfg):
                         vvv2 = float(shablon[p+1:])
                         shablon = str(round(vvv1 * vvv2, 2))
                     elif (outColName=='код') :
-                        shablon = nameToId(shablon)
+                        shablon = shablon.lstrip('0')
                     recOut[outColName] = shablon.strip()
 
-            if   'RUR'==recOut['валюта'] :
-                       csvWriterRUR.writerow(recOut)
-            elif 'USD'==recOut['валюта'] :
-                       csvWriterUSD.writerow(recOut)    
-            elif 'EUR'==recOut['валюта'] :
-                       csvWriterEUR.writerow(recOut)    
+            #if   'RUR'==recOut['валюта'] :
+            #           csvWriterRUR.writerow(recOut)
+            #elif 'USD'==recOut['валюта'] :
+            #           csvWriterUSD.writerow(recOut)    
+            #elif 'EUR'==recOut['валюта'] :
+            csvWriterEUR.writerow(recOut)    
             
         except Exception as e:
             print(e)
