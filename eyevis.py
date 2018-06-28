@@ -81,7 +81,7 @@ def nameToId(value) :
 
 def getXlsString(sh, i, in_columns_j):
     impValues = {}
-    for item in in_columns_j.keys() :
+    for item in in_columns_j.keys() :       
         j = in_columns_j[item]-1
         if item in ('закупка','продажа','цена1') :
             if getCell(row=i, col=j, isDigit='N', sheet=sh).find('Звоните') >=0 :
@@ -111,6 +111,10 @@ def getXlsxString(sh, i, in_columns_j):
             #print(sh, i, sh.cell( row=i, column=j).value, sh.cell(row=i, column=j).number_format, currencyType(sh, i, j))
         elif item == 'валюта_по_формату':
             impValues[item] = currencyType(row=i, col=j, sheet=sh)
+        elif item == 'short_descr':
+            if getCellXlsx(row=i, col=j, isDigit='N', sheet=sh)=='':
+                j = 3                                 # иногда краткое описание бывает в колонке "С"
+            impValues['short_descr'] = getCellXlsx(row=i, col=j, isDigit='N', sheet=sh)
         elif item == 'long_descr':
             long_descr=[]
             for k in range(7, 45):
@@ -118,6 +122,8 @@ def getXlsxString(sh, i, in_columns_j):
                 if tempVal != '':
                     long_descr.append(tempVal)
             impValues['long_descr'] = '; '.join(long_descr)
+        elif item == 'код_' :
+             impValues['код_'] = getCellXlsx(row=i, col=j, isDigit='N', sheet=sh).lstrip('0')
         else:
             impValues[item] = getCellXlsx(row=i, col=j, isDigit='N', sheet=sh)
     return impValues
@@ -188,8 +194,6 @@ def convert_excel2csv(cfg):
                         vvv1 = float(shablon[:p])
                         vvv2 = float(shablon[p+1:])
                         shablon = str(round(vvv1 * vvv2, 2))
-                    elif (outColName=='код') :
-                        shablon = shablon.lstrip('0')
                     recOut[outColName] = shablon.strip()
 
             #if   'RUR'==recOut['валюта'] :
